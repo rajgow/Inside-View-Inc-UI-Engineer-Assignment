@@ -2,19 +2,29 @@
 	var home = {
 		model:{
 			webResource : "http://newsmartwave.net/html/venedor/green/",
+			YQLLinkLeftYRL : "https://query.yahooapis.com/v1/public/yql?q=SELECT%20*%20FROM%20data.html.cssselect%20WHERE%20url%3D'",
+			YQLLinkRightYRL : "'%20AND%20css%3D'a'&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys",
 			crawledHistory : {},
-			yqlQueryModel : [{
-				url : 'https://query.yahooapis.com/v1/public/yql?q=SELECT%20*%20FROM%20data.html.cssselect%20WHERE%20url%3D%27http%3A%2F%2Fnewsmartwave.net%2Fhtml%2Fvenedor%2Fgreen%2Findex.html%27%20AND%20css%3D%27%23products-tabs-content%27&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys',
-				type : 'productList',
-				data : ''
+			yqlQueryModel : [],
+			constructYqlQueryModel : function() {
+				home.model.yqlQueryModel = [{
+					url : 'https://query.yahooapis.com/v1/public/yql?q=SELECT%20*%20FROM%20data.html.cssselect%20WHERE%20url%3D%27http%3A%2F%2Fnewsmartwave.net%2Fhtml%2Fvenedor%2Fgreen%2Findex.html%27%20AND%20css%3D%27%23products-tabs-content%27&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys',
+					type : 'productList',
+					data : ""
+				},
+				{
+					url : home.model.getYqlUrl(),
+					type : 'links',
+					data : ""
+				}]
 			},
-			{
-				url : "https://query.yahooapis.com/v1/public/yql?q=SELECT%20*%20FROM%20data.html.cssselect%20WHERE%20url%3D'http%3A%2F%2Fnewsmartwave.net%2Fhtml%2Fvenedor%2Fgreen%2Findex.html'%20AND%20css%3D'a'&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys",
-				type : 'links',
-				data : ''
-			}],
-			init : function() {
+			getYqlUrl : function(url) {
+				var deafult = "http://newsmartwave.net/html/venedor/green/index.html";
+				return url ? home.model.YQLLinkLeftYRL + url + home.model.YQLLinkRightYRL : home.model.YQLLinkLeftYRL + deafult + home.model.YQLLinkRightYRL;
 				
+			},
+			init : function() {
+				home.model.constructYqlQueryModel();
 			}
 		},
 		controller: {
@@ -27,9 +37,11 @@
 						crossDomain: true,
 						dataType: 'jsonp',
 						success:function(result) {
-							yqlQueryModel[index].data = result.query.results.results;
+							//dontPopulateCrawl ? yqlQueryModel[index].data.a.push(result.query.results.results) : yqlQueryModel[index].data = result.query.results.results;
 							home.controller.doAjax(home.model.yqlQueryModel,index+1);
-							home.controller.processTopopulateCrawlingResults(yqlQueryModel[index]);
+							if(result.query.results.results) {
+								home.controller.processTopopulateCrawlingResults(yqlQueryModel[index].type,result.query.results.results);
+							}	
 						}
 					});
 				} else {
@@ -37,18 +49,21 @@
 					$("#loaderBG").removeClass('loaderBG');
 				}
 			},
-			processTopopulateCrawlingResults : function(yqlQueryModel) {
-				switch(yqlQueryModel.type) {
+			processTopopulateCrawlingResults : function(type,data) {
+				switch(type) {
 					case "productList" :
-						home.view.populateProductDetails(yqlQueryModel.data);
+						home.view.populateProductDetails(data);
 						break;
 					case  "links" :
-						home.view.populateWebLinks(yqlQueryModel.data);
+						home.view.populateWebLinks(data);
 						break;
 				}
 			},
 			getEle : function( eleTag, className ) {
 				return className ? $(document.createElement(eleTag)).addClass(className) : $(document.createElement(eleTag));
+			},
+			checkUrl : function(url) {
+				return url.indexOf("http") == -1 && url.indexOf("#") == -1;
 			},
 			init:function(){
 				home.model.init();
@@ -80,11 +95,17 @@
 				$.each(data.a,function( index, webPageLink) {
 					if("content" in webPageLink && !home.model.crawledHistory[webPageLink.href]) {
 						home.model.crawledHistory[webPageLink.href] = webPageLink;
-						$webPageAtag = home.controller.getEle( "A" ,'fSize-1').attr('href',home.model.webResource+'/'+webPageLink.href);
+						if(home.controller.checkUrl(webPageLink.href)) {
+							webPageLink.href = webPageLink.href.split("/")[webPageLink.href.split("/").length-1];
+							home.model.yqlQueryModel[1].url = home.model.getYqlUrl(home.model.webResource+webPageLink.href);
+							home.controller.doAjax(home.model.yqlQueryModel,1);
+						}	
+						$webPageAtag = home.controller.getEle( "A" ,'fSize-1').attr('href',home.model.webResource+webPageLink.href);
 						$webPageAtag.text(webPageLink.content);
 						$("#linksContainer").append(home.controller.getEle( "DIV", 'col-md-3 col-sm-6 col-xs-12' ).append($webPageAtag));
 					}
 				});
+				console.log(i);
 				$("#webPageLink").removeClass('hide');
 			},
 			init:function() {
